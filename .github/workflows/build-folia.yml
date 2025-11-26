@@ -1,0 +1,47 @@
+name: Build Folia Fork
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Gradle Wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build with Gradle
+        run: ./gradlew build --no-daemon
+
+      - name: Upload Paper JAR (Mojang Mapped)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastAsyncWorldEdit-Paper-Folia
+          path: worldedit-bukkit/build/libs/FastAsyncWorldEdit-Paper-*.jar
+          if-no-files-found: error
+
+      - name: Upload Bukkit JAR (Spigot Mapped)
+        uses: actions/upload-artifact@v4
+        with:
+          name: FastAsyncWorldEdit-Bukkit-Folia
+          path: worldedit-bukkit/build/libs/FastAsyncWorldEdit-Bukkit-*.jar
+          if-no-files-found: error

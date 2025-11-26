@@ -36,3 +36,9 @@ worldedit-core/src/main/resources/lang/*
 .DS_Store
 ### Run server ignore
 run-*
+
+
+#Ignore windsurf AI rules
+.windsurfrules
+.windsurf/
+.codacy/

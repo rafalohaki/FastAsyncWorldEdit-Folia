@@ -339,7 +339,8 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
             SideEffect.HISTORY,
             SideEffect.HEIGHTMAPS,
             SideEffect.LIGHTING,
-            SideEffect.NEIGHBORS
+            SideEffect.NEIGHBORS,
+            SideEffect.ENTITY_EVENTS
     );
 
     @Override
@@ -635,12 +636,7 @@ public final class PaperweightFaweAdapter extends FaweAdapter<net.minecraft.nbt.
         ServerChunkCache chunkManager = serverLevel.getChunkSource();
 
         ChunkPos chunkPos = new ChunkPos(new BlockPos(pt.x(), pt.y(), pt.z()));
-        TransformerGeneratorAccess access = new TransformerGeneratorAccess() {
-            @Override
-            public boolean canTransformBlocks() {
-                return true;
-            }
-        };
+        TransformerGeneratorAccess access = new TransformerGeneratorAccess();
         FaweBlockStateListPopulator populator = new FaweBlockStateListPopulator(serverLevel);
         access.setDelegate(populator);
         List<CraftBlockState> placed = syncRegion(world, pt, () -> {

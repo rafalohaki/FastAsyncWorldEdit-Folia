@@ -79,6 +79,20 @@ val adaptersReobf = configurations.create("adaptersReobf") {
     extendsFrom(adapters)
 }
 
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy {
+            capabilitiesResolution {
+                withCapability("org.lz4:lz4-java") {
+                    select(candidates.first {
+                        (it.id as org.gradle.api.artifacts.component.ModuleComponentIdentifier).group == "at.yawk.lz4"
+                    })
+                }
+            }
+        }
+    }
+}
+
 dependencies {
     api(project(":worldedit-core"))
     api(project(":worldedit-libs:bukkit"))
@@ -171,6 +185,9 @@ tasks.register<ShadowJar>("reobfShadowJar") {
          if (key == "FAWE-Plugin-Jar-Type") {
              value = "spigot"
          }
+         if (key == "paperweight-mappings-namespace") {
+             exclude()
+         }
      }
     }
     exclude("META-INF/INDEX.LIST", "META-INF/*.SF", "META-INF/*.DSA", "META-INF/*.RSA", "module-info.class")
@@ -259,7 +276,8 @@ publishMods {
 
     // We publish the reobfJar twice to ensure that the modrinth download menu picks the right jar for the platform regardless
     // of minecraft version.
-    val mojmapPaperVersions = listOf("1.20.6", "1.21.1", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10")
+    val mojmapPaperVersions = listOf("1.20.6", "1.21.1", "1.21.4", "1.21.5", "1.21.6", "1.21.7", "1.21.8", "1.21.9", "1.21.10",
+            "1.21.11")
     val spigotMappedPaperVersions = listOf("1.20.2", "1.20.4")
 
     // Mark reobfJar as spigot only for 1.20.5+

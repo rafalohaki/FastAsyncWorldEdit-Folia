@@ -212,13 +212,6 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
 
     private static final RandomSource random = RandomSource.create();
 
-    private static final String WRONG_VERSION =
-            """
-            This version of FastAsyncWorldEdit has not been tested with the current Minecraft version.
-            While it may work, there might be unexpected issues.
-            It is recommended to use a version of FastAsyncWorldEdit that supports your Minecraft version.
-            """.stripIndent();
-
     // ------------------------------------------------------------------------
     // Code that may break between versions of Minecraft
     // ------------------------------------------------------------------------
@@ -228,11 +221,8 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
         CraftServer.class.cast(Bukkit.getServer());
 
         int dataVersion = SharedConstants.getCurrentVersion().dataVersion().version();
-        if (dataVersion < Constants.DATA_VERSION_MC_1_21_9) {
-            throw new UnsupportedClassVersionError("Not 1.21.9 or higher!");
-        }
         if (dataVersion != Constants.DATA_VERSION_MC_1_21_9 && dataVersion != Constants.DATA_VERSION_MC_1_21_10) {
-            logger.warning(WRONG_VERSION);
+            throw new UnsupportedClassVersionError("Not 1.21.(9/10) or higher!");
         }
 
         serverWorldsField = CraftServer.class.getDeclaredField("worlds");
@@ -871,12 +861,13 @@ public final class PaperweightAdapter implements BukkitImplAdapter<net.minecraft
     }
 
     private static final Set<SideEffect> SUPPORTED_SIDE_EFFECTS = Sets.immutableEnumSet(
-        SideEffect.NEIGHBORS,
+        //FAWE start - FAWE-supported side effects
+        SideEffect.HISTORY,
+        SideEffect.HEIGHTMAPS,
         SideEffect.LIGHTING,
-        SideEffect.VALIDATION,
-        SideEffect.ENTITY_AI,
-        SideEffect.EVENTS,
-        SideEffect.UPDATE
+        SideEffect.NEIGHBORS,
+        SideEffect.ENTITY_EVENTS
+        //FAWE end
     );
 
     @Override

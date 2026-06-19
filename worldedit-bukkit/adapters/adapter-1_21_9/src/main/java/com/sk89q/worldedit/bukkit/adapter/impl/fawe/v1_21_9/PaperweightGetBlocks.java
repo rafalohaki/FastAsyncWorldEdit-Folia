@@ -202,23 +202,28 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
 
     @Override
     public FaweCompoundTag tile(final int x, final int y, final int z) {
-        BlockEntity blockEntity = getChunk().getBlockEntity(new BlockPos((x & 15) + (
-                chunkX << 4), y, (z & 15) + (
-                chunkZ << 4)));
-        if (blockEntity == null) {
-            return null;
-        }
-        return NMS_TO_TILE.apply(blockEntity);
+        LevelChunk chunk = getChunk();
+        if (chunk == null) return null;
 
+        BlockPos pos = new BlockPos((x & 15) + (chunkX << 4), y, (z & 15) + (chunkZ << 4));
+        Map<BlockPos, BlockEntity> tiles = chunk.getBlockEntities();
+        if (tiles == null) return null;
+
+        BlockEntity blockEntity = tiles.get(pos);
+        if (blockEntity == null) return null;
+
+        return NMS_TO_TILE.apply(blockEntity);
     }
 
     @Override
     public Map<BlockVector3, FaweCompoundTag> tiles() {
-        Map<BlockPos, BlockEntity> nmsTiles = getChunk().getBlockEntities();
-        if (nmsTiles.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return AdaptedMap.immutable(nmsTiles, posNms2We, NMS_TO_TILE);
+        LevelChunk chunk = getChunk();
+        if (chunk == null) return Collections.emptyMap();
+
+        Map<BlockPos, BlockEntity> tiles = chunk.getBlockEntities();
+        if (tiles == null || tiles.isEmpty()) return Collections.emptyMap();
+
+        return AdaptedMap.immutable(tiles, posNms2We, NMS_TO_TILE);
     }
 
     @Override
@@ -351,7 +356,8 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
         }
         // Remove existing tiles. Create a copy so that we can remove blocks
         Map<BlockPos, BlockEntity> chunkTiles = new HashMap<>(nmsChunk.getBlockEntities());
-        List<BlockEntity> beacons = null;
+        // Store beacon positions for deferred sound/event handling (but remove block entity immediately)
+        List<BlockPos> beaconPositions = null;
         if (!chunkTiles.isEmpty()) {
             for (Map.Entry<BlockPos, BlockEntity> entry : chunkTiles.entrySet()) {
                 final BlockPos pos = entry.getKey();
@@ -366,32 +372,16 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
                 int ordinal = set.getBlock(lx, ly, lz).getOrdinal();
                 if (ordinal != BlockTypesCache.ReservedIDs.__RESERVED__) {
                     BlockEntity tile = entry.getValue();
-                    if (PaperLib.isPaper() && tile instanceof BeaconBlockEntity) {
-                        if (beacons == null) {
-                            beacons = new ArrayList<>();
-                        }
-                        beacons.add(tile);
-                        if (FoliaUtil.isFoliaServer()) {
-                            Location location = new Location(
-                                    nmsWorld.getWorld(),
-                                    tile.getBlockPos().getX(),
-                                    tile.getBlockPos().getY(),
-                                    tile.getBlockPos().getZ()
-                            );
-                            Bukkit.getServer().getRegionScheduler().execute(
-                                    WorldEditPlugin.getInstance(),
-                                    location,
-                                    () -> PaperweightPlatformAdapter.removeBeacon(tile, nmsChunk)
-                            );
-                        } else {
-                            PaperweightPlatformAdapter.removeBeacon(tile, nmsChunk);
-                        }
-                        continue;
-                    }
-                    nmsChunk.removeBlockEntity(tile.getBlockPos());
                     if (createCopy) {
                         copy.storeTile(tile);
                     }
+                    if (PaperLib.isPaper() && tile instanceof BeaconBlockEntity) {
+                        if (beaconPositions == null) {
+                            beaconPositions = new ArrayList<>();
+                        }
+                        beaconPositions.add(pos.immutable());
+                    }
+                    nmsChunk.removeBlockEntity(pos);
                 }
             }
         }
@@ -431,6 +421,7 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
                                         new char[4096],
                                         adapter,
                                         serverLevel.registryAccess(),
+                                        serverLevel.palettedContainerFactory().blockStatesStrategy(),
                                         biomeData
                                 );
                                 if (PaperweightPlatformAdapter.setSectionAtomic(
@@ -506,6 +497,7 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
                                 setArr,
                                 adapter,
                                 serverLevel.registryAccess(),
+                                serverLevel.palettedContainerFactory().blockStatesStrategy(),
                                 biomeData
                         );
                         if (PaperweightPlatformAdapter.setSectionAtomic(
@@ -570,6 +562,7 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
                                 setArr,
                                 adapter,
                                 serverLevel.registryAccess(),
+                                serverLevel.palettedContainerFactory().blockStatesStrategy(),
                                 biomeData != null ? biomeData : (PalettedContainer<Holder<Biome>>) existingSection.getBiomes()
                         );
                         if (!PaperweightPlatformAdapter.setSectionAtomic(
@@ -612,15 +605,35 @@ public class PaperweightGetBlocks extends AbstractBukkitGetBlocks<ServerLevel, L
 
             // Call beacon deactivate events here synchronously
             // list will be null on spigot, so this is an implicit isPaper check
-            if (beacons != null && !beacons.isEmpty()) {
-                final List<BlockEntity> finalBeacons = beacons;
+            if (beaconPositions != null && !beaconPositions.isEmpty()) {
+                final List<BlockPos> finalBeaconPositions = beaconPositions;
 
-                syncTasks.add(() -> {
-                    for (BlockEntity beacon : finalBeacons) {
-                        BeaconBlockEntity.playSound(beacon.getLevel(), beacon.getBlockPos(), SoundEvents.BEACON_DEACTIVATE);
-                        new BeaconDeactivatedEvent(CraftBlock.at(beacon.getLevel(), beacon.getBlockPos())).callEvent();
+                if (FoliaUtil.isFoliaServer()) {
+                    for (BlockPos beaconPos : finalBeaconPositions) {
+                        Location location = new Location(
+                                nmsWorld.getWorld(),
+                                beaconPos.getX(),
+                                beaconPos.getY(),
+                                beaconPos.getZ()
+                        );
+                        Bukkit.getServer().getRegionScheduler().execute(
+                                WorldEditPlugin.getInstance(),
+                                location,
+                                () -> {
+                                    BeaconBlockEntity.playSound(nmsWorld, beaconPos, SoundEvents.BEACON_DEACTIVATE);
+                                    new BeaconDeactivatedEvent(CraftBlock.at(nmsWorld, beaconPos)).callEvent();
+                                }
+                        );
                     }
-                });
+                } else {
+                    // On non-Folia Paper, add to syncTasks
+                    syncTasks.add(() -> {
+                        for (BlockPos beaconPos : finalBeaconPositions) {
+                            BeaconBlockEntity.playSound(nmsWorld, beaconPos, SoundEvents.BEACON_DEACTIVATE);
+                            new BeaconDeactivatedEvent(CraftBlock.at(nmsWorld, beaconPos)).callEvent();
+                        }
+                    });
+                }
             }
 
             Set<UUID> entityRemoves = set.getEntityRemoves();

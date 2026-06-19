@@ -3,27 +3,31 @@ on:
   push:
     branches:
       - main
+      - 'feature/folia'
 jobs:
   build:
-    if: github.repository_owner == 'IntellectualSites'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6
       - name: Validate Gradle Wrapper
-        uses: gradle/actions/wrapper-validation@v5
+        uses: gradle/actions/wrapper-validation@v6
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           cache: gradle
-          java-version: 21
+          java-version: 25
       - name: Build
         run: ./gradlew build
       - name: Determine release status
         if: ${{ runner.os == 'Linux' }}
         run: |
-          if [ "$(./gradlew properties | awk '/^version:/ { print $2; }' | grep '\-SNAPSHOT')" ]; then
+          VERSION=$(./gradlew properties | awk '/^version:/ { print $2; }')
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          if echo "$VERSION" | grep -q '\-SNAPSHOT'; then
             echo "STATUS=snapshot" >> $GITHUB_ENV
           else
             echo "STATUS=release" >> $GITHUB_ENV
@@ -67,10 +71,18 @@ jobs:
           target-branch: main
           target-directory: worldedit-bukkit
       - name: Archive Artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: FastAsyncWorldEdit-Bukkit-SNAPSHOT
           path: worldedit-bukkit/build/libs/FastAsyncWorldEdit-*.jar
+      - name: Create GitHub Release
+        if: ${{ runner.os == 'Linux' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: ${{ env.VERSION }}
+          files: worldedit-bukkit/build/libs/FastAsyncWorldEdit-*.jar
+          generate_release_notes: true
       - name: Publish to Modrinth
         if: ${{ runner.os == 'Linux' && env.STATUS == 'release' && github.event_name == 'push' && github.ref == 'refs/heads/main'}}
         run: ./gradlew publishMods
